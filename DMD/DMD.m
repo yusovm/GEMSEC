@@ -27,7 +27,11 @@ Phi=X2*Vr/Sr*W;
 lambda=diag(D);
 omega=log(lambda)/dt;
 
-
 x1=X(:,1);
 b=Phi\x1;
-% plot(real(Phi),'Linewidth',[2])
+time_dynamics=zeros(r,length(t));
+for iter=1:length(t)
+    time_dynamics(:,iter)=(b.*exp(omega*t(iter)));
+end
+X_dmd=Phi*time_dynamics;
+
