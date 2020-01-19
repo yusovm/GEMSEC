@@ -56,7 +56,7 @@ import pywt
 # CLASSES
 # =============================================================================
 
-class Multi_PDB():
+class Multi_PDB:
     def __init__(self, file_list):
         self.files = file_list
         
@@ -77,7 +77,7 @@ class Multi_PDB():
             combined_angles = pd.concat(angle_list)
         return combined_angles
 
-class Angle_Calc():
+class Angle_Calc:
     def __init__(self, in_file):
         self.file = in_file
         self.angles = pd.DataFrame()
@@ -310,7 +310,7 @@ class Angle_Calc():
         return sc_df
                 
 #Includes all currently used methods of dimensionality reduction
-class Dim_Reduction():
+class Dim_Reduction:
     def __init__(self, in_file, angle_df, save_dir):
         self.file = in_file
         self.fname = os.path.basename(in_file)
@@ -426,7 +426,7 @@ class Dim_Reduction():
         plt.savefig(self.sdir + "Isomap - " + self.fname + ".png")
         return IM_data
         
-class PCA_Components():
+class PCA_Components:
     def __init__(self, pca, save_dir):
         self.pca = pca
         self.pca_df = pca[0]
@@ -602,7 +602,7 @@ class PCA_Components():
         for frame in frames:
             os.remove(self.sdir + file + ' - Frame ' + f'{frame}' + '.png')
 
-class GMM_Clustering():
+class GMM_Clustering:
     def __init__(self, in_file, pca_df, save_dir):
         self.file = in_file
         self.pca_df = pca_df
@@ -723,7 +723,7 @@ class GMM_Clustering():
         cp_df = pd.DataFrame.from_dict(cp_d, orient = 'index')
         return cp_df
     
-class GMM_Transitions():
+class GMM_Transitions:
     #FUNCTION DESCRIPTION
     #Parameters:
     #   -
@@ -765,7 +765,7 @@ class GMM_Transitions():
         plt.savefig(wd + 'Transition Frequencies Between Clusters - ' + name + '.png')
         plt.close()
     
-class Ramachandran():
+class Ramachandran:
     def __init__(self, save_dir):
         self.sdir = save_dir
     
@@ -835,7 +835,7 @@ class Ramachandran():
             cluster_phi_psi = clst_angles[clst_angles['Cluster'] == i]
             self.plt_all(cluster_phi_psi, 'Cluster ' + f'{i}')
             
-class Hilbert():
+class Hilbert:
     def __init__(self, data_2d):
         self.data = data_2d
         
@@ -940,7 +940,7 @@ class Hilbert():
         
         return hilbert_data
 
-class RMSD():
+class RMSD:
     def __init__(self, angle_df):
         self.angles = angle_df.dropna(axis = 0)
         
@@ -1013,7 +1013,7 @@ class RMSD():
         sns.heatmap(rmsd_df)
         return rmsd_df
     
-class Transformations():
+class Transformations:
     def __init__(self, angle_data):
         self.data = angle_data.dropna(axis = 0)
         
