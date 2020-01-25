@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 from MD_Analysis import Angle_Calc
 
 #Choose desired pdb
-pdb="WT_295K_500ns_50ps_1_run.pdb"
+pdb="pdbs/WT_295K_200ns_50ps_0_run.pdb"
 #Extract phi, psi angles
 AC=Angle_Calc(pdb)
 Angle_DF=AC.get_phi_psi()
@@ -32,7 +32,7 @@ t=np.linspace(0,f.shape[0],f.shape[0])*dt
 Xgrid,T=np.meshgrid(xi,t)
 
 #Define r # of truncations, rank truncate data via SVD
-r=4
+r=19
 U,S,V=np.linalg.svd(X1,full_matrices=False)
 Ur=U[:,:r]
 Sr=np.diag(S[:r])
@@ -56,8 +56,8 @@ X_dmd=np.dot(Phi,time_dynamics) #DMD solution
 fig, ax = plt.subplots(3,2,sharex='col', sharey='row')
 
 for i in range(3):
-    ax[i,0].plot(np.abs(X[i,:]))
-    ax[i,1].plot(np.abs(X_dmd[i,:]))
+    ax[i,0].plot(X[i,:])
+    ax[i,1].plot(X_dmd[i,:])
 
 #plt.plot(np.real(Phi))  
 #plt.plot(np.abs(X[0,:]))

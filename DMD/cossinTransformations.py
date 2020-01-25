@@ -34,4 +34,4 @@ def halftime(data):
 half0 = halftime(Angle_DF0)
 angle_cossin = cossin(half0)
 T=Transformations(angle_cossin)
-Transforms0=T.All_Transforms()
+Transforms0=T.wavelet_transform()
