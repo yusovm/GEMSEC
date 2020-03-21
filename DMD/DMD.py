@@ -32,7 +32,7 @@ t=np.linspace(0,f.shape[0],f.shape[0])*dt
 Xgrid,T=np.meshgrid(xi,t)
 
 #Define r # of truncations, rank truncate data via SVD
-r=19
+r=20
 U,S,V=np.linalg.svd(X1,full_matrices=False)
 Ur=U[:,:r]
 Sr=np.diag(S[:r])
@@ -59,6 +59,6 @@ for i in range(3):
     ax[i,0].plot(X[i,:])
     ax[i,1].plot(X_dmd[i,:])
 
-#plt.plot(np.real(Phi))  
+plt.plot(np.real(Phi))  
 #plt.plot(np.abs(X[0,:]))
 #plt.plot(np.abs(X_dmd[0,:]))
