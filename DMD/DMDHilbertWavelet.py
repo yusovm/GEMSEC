@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Created on Wed Jul  1 09:46:10 2020
+Created on Sat Oct 31 12:17:28 2020
 
 @author: micha
 """
@@ -10,7 +10,10 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import pywt
+import csv
+import sys
 from pywt import wavedec
+from scipy.signal import hilbert
 from MD_Analysis import Angle_Calc
 
 #Import pdb files and group them by 50ps/100ps
@@ -70,11 +73,32 @@ for i in range(fadd.shape[0]):
     fadd[i]=f[-1]
 fwav=np.vstack((f,fadd))
 
+fs = 1
+signal = f[:,0]
+analytic_signal = hilbert(signal)
+amplitude_envelope = np.abs(analytic_signal)
+instantaneous_phase = np.unwrap(np.angle(analytic_signal))
+instantaneous_frequency = (np.diff(instantaneous_phase) / (2.0*np.pi) * fs)
+fig = plt.figure()
+ax0 = fig.add_subplot(211)
+ax0.plot(signal, label='signal')
+ax0.plot(amplitude_envelope, label='envelope')
+ax0.set_xlabel("time in seconds")
+ax0.legend()
+ax1 = fig.add_subplot(212)
+ax1.plot(instantaneous_frequency)
+ax1.set_xlabel("time in seconds")
+
+analytic_signalf = hilbert(f,axis=0)
+amplitude_envelopef = np.abs(analytic_signalf)
+instantaneous_phasef = np.unwrap(np.angle(analytic_signalf))
+instantaneous_frequencyf = (np.diff(instantaneous_phasef) / (2.0*np.pi) * fs)
+
 #Compute wavelet transform
-(cA, cD)=pywt.dwt(fwav, 'db1', axis=0)
+(cA, cD)=pywt.dwt(amplitude_envelopef, 'haar', axis=0)
 cA.shape
 cD.shape
-coeffs = wavedec(fwav, 'bior6.8', level=15, axis=0)
+coeffs = wavedec(amplitude_envelopef, 'haar', level=15, axis=0)
 
 #Separate coefficients by different frequencies, run DMD
 freq=[0]*index
@@ -96,22 +120,22 @@ invf=pywt.idwt(cAinv,cDinv,'db1',axis=0)
 error=np.mean(np.sqrt((invf-fwav)**2))
 
 wavDMD=[0]*index
-coeffs = wavedec(fwav, 'bior1.1', level=index-1, axis=0)
+coeffs = wavedec(amplitude_envelopef, 'haar', level=index-1, axis=0)
 for i in range(0,index):
     if coeffs[i].shape[0]>40:
         wavDMD[i]=DMD(1,coeffs[i],40).T
     else:
         wavDMD[i]=DMD(1,coeffs[i],coeffs[i].shape[0]-1).T
-invf=pywt.waverec(wavDMD, 'bior1.1',axis=0)
+invf=pywt.waverec(wavDMD, 'haar',axis=0)
 error=np.mean(np.sqrt((invf-fwav)**2))
 error
 
 coeffs={}
 wavDMD={}
-error={}
+error1={}
 for wavname in pywt.wavelist(kind='discrete'):
     print('Working on ' + wavname)
-    coeffs[wavname] = wavedec(f, wavname, level=index-1, axis=0)
+    coeffs[wavname] = wavedec(analytic_signalf, wavname, level=index-1, axis=0)
     try:
         wavDMD[wavname]=[0]*index
         for i in range(0,index):
@@ -120,15 +144,23 @@ for wavname in pywt.wavelist(kind='discrete'):
             else:
                 wavDMD[wavname][i]=DMD(1,coeffs[wavname][i],coeffs[wavname][i].shape[0]-1).T
         invf=pywt.waverec(wavDMD[wavname], wavname,axis=0)
-        error[wavname]=np.mean(np.sqrt((invf-f)**2))
+        error1[wavname]=np.mean(np.sqrt((invf-analytic_signalf)**2))
     except:
         print('Exception while working on ' + wavname)
+        
+dict = {'Python' : '.py', 'C++' : '.cpp', 'Java' : '.java'}
+w = csv.writer(open("errorhws.csv", "w"))
+for key, val in error1.items():
+    w.writerow([key, val])
+    
+X_dmd_hilbert = DMD(1,analytic_signalf,40)
+invfh = -hilbert(X_dmd_hilbert.real,axis=1)
+error2=np.sqrt(np.mean(np.abs((invfh-f.T))**2))
         
 #Define dt based on simulation time step (100ps) and r based on number of columns
 dt=100*(10**-12)
 r=40
 
-        print('Exception while working on ' + wavname)
 #DMD function (rows<columns)
 def DMD(dt,f,r):
     #Create data matrices X1, X2
@@ -175,8 +207,8 @@ def DMDError_2(data,x,n):
     f = data[0:x,:]
     X_dmd = DMD(dt,f,r)
     X_dmd = X_dmd[:,0:n]
-    error=np.sqrt((X_dmd-f.T[:,0:n])**2)
-    return np.mean(error)
+    error=np.mean((X_dmd-f.T[:,0:n])**2)
+    return np.sqrt(error)
 
 #Applying DMD with varying amounts of data used, reconstructed/predicted, and sparser sampling
 #while changing truncation when less columns than rows and calculating average error
@@ -195,19 +227,130 @@ def DMDError_3(data,num_timesteps,num_samples_recon,timestep):
     return np.mean(error)
     
 #Applying DMD with varying amounts of data used and reconstructed/predicted and calculating average error
-def DMDError_2F(data,x,n):
+def DMDError_2H(data,x,n,dt,r):
     f = data[0:x,:]
-    f_fourier = np.fft.fft(f,axis=0)
-    X_dmd = DMD(dt,f_fourier,r)
-    X_dmd = np.fft.ifft(X_dmd,axis=0)
+    f_hilbert = hilbert(f,axis=0)
+    X_dmd = DMD(dt,f_hilbert,r)
+    X_dmd = -hilbert(X_dmd,axis=0)
     X_dmd = X_dmd[:,0:n]
     error=np.sqrt((X_dmd-f.T[:,0:n])**2)
     return np.mean(error)
 
-tstep = [int(x) for x in np.linspace(50,36500,100)]
-error_data = [[DMDError_2F(f, i, j) for i in tstep]
-                               for j in tstep]
+def DMDError_2W(data,x,n,dt,r):
+    if n>x:
+        return np.nan
+    f = data[0:x,:]
+    index=int(np.log2(f.shape[0]))
+    coeffs={}
+    wavDMD={}
+    error={}
+    for wavname in pywt.wavelist(kind='discrete'):
+        print('Working on ' + wavname)
+        coeffs[wavname] = wavedec(f, wavname, level=index-1, axis=0)
+        try:
+            wavDMD[wavname]=[0]*index
+            for i in range(0,index):
+                if coeffs[wavname][i].shape[0]>40:
+                    wavDMD[wavname][i]=DMD(1,coeffs[wavname][i],40).T
+                else:
+                    wavDMD[wavname][i]=DMD(1,coeffs[wavname][i],coeffs[wavname][i].shape[0]-1).T
+            invf=pywt.waverec(wavDMD[wavname], wavname,axis=0)
+            invf=invf[:n,:]
+            error[wavname]=np.sqrt(np.mean((invf-f[:n,:])**2))
+        except:
+            print("Unexpected error while working on:" + wavname, sys.exc_info()[0])
+    return min(error.values())
+
+def DMDError_2Wn(data,x,dt):
+    f = data[0:x,:]
+    r = f.shape[1]
+    index=int(np.log2(f.shape[0]))
+    coeffs={}
+    wavDMD={}
+    error={}
+    for wavname in pywt.wavelist(kind='discrete'):
+        print('Working on ' + wavname)
+        coeffs[wavname] = wavedec(f, wavname, level=index-1, axis=0)
+        try:
+            wavDMD[wavname]=[0]*index
+            for i in range(0,index):
+                if coeffs[wavname][i].shape[0]>r:
+                    wavDMD[wavname][i]=DMD(dt,coeffs[wavname][i],r).T
+                else:
+                    wavDMD[wavname][i]=DMD(dt,coeffs[wavname][i],coeffs[wavname][i].shape[0]-1).T
+            invf=pywt.waverec(wavDMD[wavname], wavname,axis=0)
+            error[wavname]=np.sqrt(np.mean((invf[:x,:]-f)**2))
+        except:
+            print("Unexpected error while working on:" + wavname, sys.exc_info()[0])
+    bestwavelet=''
+    for wavname in error:
+        errorlast=error[wavname]
+        errorbest=error.get(bestwavelet,np.Inf)
+        if errorlast<errorbest:
+            bestwavelet=wavname
+        print("Best wavelet: " + bestwavelet + " with error "+str(errorbest))
+    bestinvf=pywt.waverec(wavDMD[bestwavelet],bestwavelet,axis=0)
+    besterror=np.zeros(x)
+    for n in range(0,x):
+        besterror[n]=np.sqrt(np.mean((bestinvf[:(n+1),]-f[:(n+1),:])**2))
+    return besterror
+
+def DMDError_3(data,num_timesteps,num_samples_recon,timestep):
+    print(num_timesteps, num_samples_recon, timestep)
+    g = data[0:num_timesteps,:]
+    sample_indexes = [i % timestep == 0 for i in range(g.shape[0])]
+    g = g[sample_indexes,:]
+    if num_timesteps/timestep > f.shape[1]:
+        r = f.shape[1]
+    else: 
+        r = int(np.floor(num_timesteps/timestep))
+    X_dmd = DMD(dt,g,r)
+    X_dmd = X_dmd[:,0:num_samples_recon]
+    error=np.sqrt((X_dmd-g.T[:,0:num_samples_recon])**2)
+    return np.mean(error)
+
+def DMDError_3W(data,num_timesteps,timestep,dt):
+    print(num_timesteps, timestep)
+    f = data[0:num_timesteps,:]
+    r = f.shape[1]
+    index=int(np.log2(f.shape[0]))
+    sample_indexes = [i % timestep == 0 for i in range(f.shape[0])]
+    f = f[sample_indexes,:]
+    coeffs={}
+    wavDMD={}
+    error={}
+    for wavname in pywt.wavelist(kind='discrete'):
+        print('Working on ' + wavname)
+        coeffs[wavname] = wavedec(f, wavname, level=index-1, axis=0)
+        try:
+            wavDMD[wavname]=[0]*index
+            for i in range(0,index):
+                if coeffs[wavname][i].shape[0]>r:
+                    wavDMD[wavname][i]=DMD(1,coeffs[wavname][i],r).T
+                else:
+                    wavDMD[wavname][i]=DMD(1,coeffs[wavname][i],coeffs[wavname][i].shape[0]-1).T
+            invf=pywt.waverec(wavDMD[wavname], wavname,axis=0)
+            error[wavname]=np.sqrt(np.mean((invf[:num_timesteps,:]-f)**2))
+        except:
+            print("Unexpected error while working on:" + wavname, sys.exc_info()[0])
+    bestwavelet=''
+    for wavname in error:
+        errorlast=error[wavname]
+        errorbest=error.get(bestwavelet,np.Inf)
+        if errorlast<errorbest:
+            bestwavelet=wavname
+        print("Best wavelet: " + bestwavelet + " with error "+str(errorbest))
+    bestinvf=pywt.waverec(wavDMD[bestwavelet],bestwavelet,axis=0)
+    besterror=np.zeros(int(num_timesteps/timestep))
+    for n in range(0,int(num_timesteps/timestep)):
+        besterror[n]=np.sqrt(np.mean((bestinvf[:(n+1),:]-f[:(n+1),:])**2))
+    return besterror
+
+tstep = [int(x) for x in np.linspace(2,36500,100)]
+error_data = [DMDError_2Wn(f, i,dt) for i in tstep]
+np.save
 error_plot_data = np.real(np.array(error_data))
+
 
 plt.figure(figsize = (10,10))
 plt.imshow(error_plot_data,origin='lower',extent=[50, 36500, 50, 36500],
@@ -267,52 +410,12 @@ def pltsubtitle(i):
     pp = int(i/2) % 2 == 0
     num = int(i /4)
     return("cos(" if cs else "sin(") + (r"$\phi_{" if pp else r"$\psi_{") + str(num+1) + ("}$)")
-    
-fig, ax = plt.subplots(10,1,sharex='col',sharey='row',num=None,
-                      figsize=(15,10),dpi=100,constrained_layout=True)
-fig.suptitle('Root Mean Squared Error of DMD Predicted Values')
-for i in range(10):
-    ax[i].plot(t, error[i,:], color='peru')
-    ax[i].set_title(pltsubtitle(i))
-    ax[i].set_ylabel('RMSE')
-    ax[i].set_xlabel('Time (s)')
-fig.savefig("Error 1 Norm.png")
-
-fig, ax = plt.subplots(10,1,sharex='col',sharey='row',num=None,
-                      figsize=(15,10),dpi=100,constrained_layout=True)
-fig.suptitle('Root Mean Squared Error of DMD Predicted Values')
-for i in np.linspace(11,20,10):
-    ax[int(i)-11].plot(t, error[int(i)-1,:], color='peru')
-    ax[int(i)-11].set_title(pltsubtitle(int(i)-1))
-    ax[int(i)-11].set_ylabel('RMSE')
-    ax[int(i)-11].set_xlabel('Time (s)')
-fig.savefig("Error 2 Norm.png")
-
-fig, ax = plt.subplots(10,1,sharex='col',sharey='row',num=None,
-                      figsize=(15,10),dpi=100,constrained_layout=True)
-fig.suptitle('Root Mean Squared Error of DMD Predicted Values')
-for i in np.linspace(21,30,10):
-    ax[int(i)-21].plot(t, error[int(i)-1,:], color='peru')
-    ax[int(i)-21].set_title(pltsubtitle(int(i)-1))
-    ax[int(i)-21].set_ylabel('RMSE')
-    ax[int(i)-21].set_xlabel('Time (s)')
-fig.savefig("Error 3 Norm.png")
-
-fig, ax = plt.subplots(10,1,sharex='col',sharey='row',num=None,
-                      figsize=(15,10),dpi=100,constrained_layout=True)
-fig.suptitle('Root Mean Squared Error of DMD Predicted Values')
-for i in np.linspace(31,40,10):
-    ax[int(i)-31].plot(t, error[int(i)-1,:], color='peru')
-    ax[int(i)-31].set_title(pltsubtitle(int(i)-1))
-    ax[int(i)-31].set_ylabel('RMSE')
-    ax[int(i)-31].set_xlabel('Time (s)')
-fig.savefig("Error 4 Norm.png")
-
-t=np.linspace(0,36500,36500)*dt
-
+ 
+t=np.linspace(0,36500,36500)   
+ 
 fig2, ax2 = plt.subplots(10,2,sharex='col', sharey='row', num=None, 
                         figsize=(15, 10), dpi=100, constrained_layout=True)
-fig2.suptitle('Actual vs. Wavelet+DMD Reconstructed Data')
+fig2.suptitle('Actual vs. Wavelet-DMD Predicted Values')
 for i in range(10):
     ax2[i,0].plot(t, f[:,i], color='brown')
     ax2[i,1].plot(t, invf[:,i], color='cadetblue')
@@ -320,63 +423,9 @@ for i in range(10):
     ax2[i,1].set_ylabel(pltsubtitle(i))
     ax2[i,0].set_xlabel('Time (s)')
     ax2[i,1].set_xlabel('Time (s)')
-fig2.savefig("Actual vs. Preidcted Wavelet 1.png")
+fig2.savefig("waveletexample.png")
 plt.show()
 
-fig2, ax2 = plt.subplots(10,2,sharex='col', sharey='row', num=None, 
-                        figsize=(15, 10), dpi=100, constrained_layout=True)
-fig2.suptitle('Actual vs. Wavelet+DMD Reconstructed Data')
-for i in np.linspace(11,20,10):
-    ax2[int(i)-11,0].plot(t, f[:,int(i)-1], color='brown')
-    ax2[int(i)-11,1].plot(t, invf[:,int(i)-1], color='cadetblue')
-    ax2[int(i)-11,0].set_ylabel(pltsubtitle(int(i)-1))
-    ax2[int(i)-11,1].set_ylabel(pltsubtitle(int(i)-1))
-    ax2[int(i)-11,0].set_xlabel('Time (s)')
-    ax2[int(i)-11,1].set_xlabel('Time (s)')
-fig2.savefig("Actual vs. Preidcted Wavelet 2.png")
-plt.show()
-
-fig2, ax2 = plt.subplots(10,2,sharex='col', sharey='row', num=None, 
-                        figsize=(15, 10), dpi=100, constrained_layout=True)
-fig2.suptitle('Actual vs. Wavelet+DMD Reconstructed Data')
-for i in np.linspace(21,30,10):
-    ax2[int(i)-21,0].plot(t, f[:,int(i)-1], color='brown')
-    ax2[int(i)-21,1].plot(t, invf[:,int(i)-1], color='cadetblue')
-    ax2[int(i)-21,0].set_ylabel(pltsubtitle(int(i)-1))
-    ax2[int(i)-21,1].set_ylabel(pltsubtitle(int(i)-1))
-    ax2[int(i)-21,0].set_xlabel('Time (s)')
-    ax2[int(i)-21,1].set_xlabel('Time (s)')
-fig2.savefig("Actual vs. Preidcted Wavelet 3.png")
-plt.show()
-
-fig2, ax2 = plt.subplots(10,2,sharex='col', sharey='row', num=None, 
-                        figsize=(15, 10), dpi=100, constrained_layout=True)
-fig2.suptitle('Actual vs. Wavelet+DMD Reconstructed Data')
-for i in np.linspace(31,40,10):
-    ax2[int(i)-31,0].plot(t, f[:,int(i)-1], color='brown')
-    ax2[int(i)-31,1].plot(t, invf[:,int(i)-1], color='cadetblue')
-    ax2[int(i)-31,0].set_ylabel(pltsubtitle(int(i)-1))
-    ax2[int(i)-31,1].set_ylabel(pltsubtitle(int(i)-1))
-    ax2[int(i)-31,0].set_xlabel('Time (s)')
-    ax2[int(i)-31,1].set_xlabel('Time (s)')
-fig2.savefig("Actual vs. Preidcted Wavelet 4.png")
-plt.show()
-
-plt.axhline(y=0,color='blue',zorder=-1)
-plt.axvline(x=0,color='red',zorder=-2)
-plt.scatter(np.real(omega),np.imag(omega), color='saddlebrown',zorder=1)
-plt.grid()
-plt.title('Real and Imaginary Components of 40 DMD Eigenvalues (\u03C9)',y=1.05)
-plt.xlabel('Real')
-plt.ylabel('Imaginary')
-plt.savefig('Real vs. Imaginary (omega) Norm.png',bbox_inches='tight')
-plt.show()
-
-plt.axhline(y=0,color='blue',zorder=-1)
-plt.axvline(x=0,color='red',zorder=-2)
-plt.scatter(np.real(Lambda),np.imag(Lambda), color='saddlebrown',zorder=1)
-plt.grid()
-plt.title('Real and Imaginary Components of 40 DMD Eigenvalues (\u03BB)')
-plt.xlabel('Real')
-plt.ylabel('Imaginary')
-plt.savefig('Real vs. Imaginary (Lambda) Norm.png',bbox_inches='tight')
+waverror=np.zeros(len(wavDMD['coif16']))
+for i in range(len(wavDMD['coif16'])):
+    waverror[i]=np.sqrt(np.mean((coeffs['coif16'][i]-wavDMD['coif16'][i])**2))
